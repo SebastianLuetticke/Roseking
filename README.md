@@ -31,4 +31,4 @@ The following models were developed in this work:
 |   5   |         yes         | coding scheme 2 (350 inputs) | reward at the end of the game + reward for each move                                     |  
 |   6   |         yes         | coding scheme 2 (350 inputs) | reward at the end of the game + reward for each move, limited to the interval \[-1, +1\] |
 
-As model 1 is not capable of executing only valid moves, it cannot be used to play a real game. 
+As model 1 is not capable of executing only valid moves, it cannot be used to play a real game. If you want to train model 1, make sure that you comment out the test games.
