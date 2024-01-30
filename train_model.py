@@ -9,7 +9,7 @@ from game_env import GameEnv
 import os
 
 GAME_NUM = 100
-WIN_RATIO = 0.3
+WIN_RATIO = 0.6
 TIMESTEPS_BEFORE_UPDATE = 100000
 TRAINING_ITERATIONS = 250
 
