@@ -146,7 +146,7 @@ player$player_number$ = {
     "hero_card_discount": None,
     "mcts": mcts$player_number$,
     "timeout": 1,
-    "selection_mode": "robust",
+    "selection_mode": "robust child",
     "env": None,
     "model": None
 }
