@@ -12,7 +12,7 @@ To train and test the developed reinforcement learning agents, make sure that th
 - [start_gui_with_power_card_input.py](start_gui_with_power_card_input.py): Execute this file to test the preset AI agent via the GUI against an AI from another project. Important: If the AI from the "King Tactics" application is to be tested, the lines specified in the gui.py file must be commented out or uncommented.
 - [compare.py](compare.py): Contains a method to compare all values of both players, which are necessary to determine the winner of "Rose King".
 - [monte_carlo.py](monte_carlo.py): The functions of the MCTS are implemented here.
-- [monte_carlo_node,py](monte_carlo_node,py): Here the class for a node in a Monte Carlo tree is implemented.
+- [monte_carlo_node,py](monte_carlo_node.py): Here the class for a node in a Monte Carlo tree is implemented.
 - [players.py](players.py): The Minimax-based algorithms and methods for accessing the MCTS and an RL agent are implemented here.
 - [game_env.py](game_env.py): Here is a Gymnasium-Environment for the "Rose King"-version from game.py implemented.
 - [train_model.py](train_model.py): Execute this file to train one of the developed RL models for the agent.
