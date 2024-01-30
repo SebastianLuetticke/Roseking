@@ -1,6 +1,7 @@
 from scipy import ndimage
 import numpy as np
 from compare import compare
+import math
 
 class Game():
     """Class for the game mechanics."""
@@ -15,8 +16,9 @@ class Game():
     POWER_CARDS_NUM = DIRECTIONS_NUM * MAX_DISTANCE
     POWER_CARDS_PLACES_NUM = 5
     HERO_CARDS_NUM = 4
+    HERO_CARD_DISCOUNT = 30
 
-    def __init__(self):
+    def __init__(self, with_power_card_input=False):
         """Initialise a new game.
         """
         self.board = np.zeros((self.BOARD_SIZE, self.BOARD_SIZE))
@@ -34,10 +36,13 @@ class Game():
         self.played_power_cards = np.empty((0,2))
 
         # Give each player five direction cards.
-        self.player_power_cards = np.array(
-            [self.drawable_power_cards[0:self.POWER_CARDS_PLACES_NUM],
-             self.drawable_power_cards[self.POWER_CARDS_PLACES_NUM:self.POWER_CARDS_PLACES_NUM*2]])
-        self.drawable_power_cards = self.drawable_power_cards[10:]
+        if not with_power_card_input:
+            self.player_power_cards = np.array(
+                [self.drawable_power_cards[0:self.POWER_CARDS_PLACES_NUM],
+                 self.drawable_power_cards[self.POWER_CARDS_PLACES_NUM:self.POWER_CARDS_PLACES_NUM*2]])
+            self.drawable_power_cards = self.drawable_power_cards[10:]
+        else:
+            self.player_power_cards = None
         
         # Give each player four hero cards.
         self.player_hero_cards_num = np.array([self.HERO_CARDS_NUM] * self.PLAYER_NUM)
@@ -53,6 +58,23 @@ class Game():
         self.last_drawn_card = None
         
         # Create a hash value to uniquely identify game states.
+        self.hash_value = str(self.player_power_cards)
+
+    def set_power_cards(self, power_card_indices):
+        """Add the predefined starting power cards to the players' hands.
+
+        arguments:
+        power_card_indices -- The indexes at which the players' starting cards are in the stack.
+        """
+        self.player_power_cards = np.array(
+                [self.drawable_power_cards[power_card_indices[0]],
+                 self.drawable_power_cards[power_card_indices[1]]])
+
+        # Remove the power cards from the stack.
+        power_card_indices = power_card_indices[0] + power_card_indices[1]
+        # For "King Tactics" comment out the following line.
+        self.drawable_power_cards = np.delete(self.drawable_power_cards, power_card_indices, axis=0)
+
         self.hash_value = str(self.player_power_cards)
 
     def calc_valuations(self):
@@ -94,16 +116,24 @@ class Game():
         all_valuations = self.calc_valuations()
         return all_valuations[:, player_index] - all_valuations[:, other_player_index]
     
-    def calc_heuristic(self, hero_card_discount, player):
+    def calc_heuristic(self, hero_card_discount, player, with_inf=False):
         """Calculate a heuristic function to determine the value
         of a game state for the given player.
         
         arguments:
         hero_card_discount -- The value that is added to the points per hero card.
         player -- The player from whose point of view the heuristic is calculated.
+        with_inf -- Boolean for whether the values inf/-inf should be calculated for final states.
         
         return: The heuristic values for each player.
         """
+        if with_inf:
+            winner = self.determine_winner()
+            if winner == player:
+                return 1000000 # not infinite to avoid problems with expectiminimax calculations.
+            if winner == -player:
+                return -1000000
+        
         player_index = self.determine_player_index(player)
         other_player_index = self.determine_player_index(player*(-1))
         
@@ -112,7 +142,7 @@ class Game():
         differences[0] += self.player_hero_cards_num[player_index] * hero_card_discount
         differences[0] -= self.player_hero_cards_num[other_player_index] * hero_card_discount
         
-        return differences
+        return differences[0]
 
     def get_legal_moves(self, player):
         """Return all the legal moves for the given player.
@@ -136,7 +166,7 @@ class Game():
             moves.append((True, False, None))
         
         # Check whether a direction card can be played.
-        new_crown_positions = np.array(self.crown_position + self.player_power_cards[player_index])
+        new_crown_positions = self.crown_position + self.player_power_cards[player_index]
         new_crown_positions_num = len(new_crown_positions)
         # When the empty direction card [0, 0] is considered, the crown position does not change.
         is_new_position = np.any(new_crown_positions != self.crown_position, axis=1)
@@ -149,16 +179,16 @@ class Game():
         is_new_position_free = self.board[row_indices, column_indices].T[0] == 0
         
         can_new_position_occupied = is_new_position_on_board & is_new_position_free & is_new_position
-        possible_dir_card_indices = np.where(can_new_position_occupied)[0]
-        new_moves = [(False, False, self.player_power_cards[player_index][i]) for i in possible_dir_card_indices]
+        possible_power_card_indices = np.where(can_new_position_occupied)[0]
+        new_moves = [(False, False, list(self.player_power_cards[player_index][i])) for i in possible_power_card_indices]
         moves = moves + new_moves
         
         # Check whether a direction card can be played in combination with a hero card.
         if self.player_hero_cards_num[player_index] > 0:
             is_new_position_occupied_by_opponent = self.board[row_indices, column_indices].T[0] == -player
             can_new_position_occupied = is_new_position_on_board & is_new_position_occupied_by_opponent & is_new_position
-            possible_dir_card_indices = np.where(can_new_position_occupied)[0]
-            new_moves = [(False, True, self.player_power_cards[player_index][i]) for i in possible_dir_card_indices]
+            possible_power_card_indices = np.where(can_new_position_occupied)[0]
+            new_moves = [(False, True, list(self.player_power_cards[player_index][i])) for i in possible_power_card_indices]
             moves = moves + new_moves
                 
         if len(moves) == 0:
@@ -215,6 +245,7 @@ class Game():
             
             # Add the drawn power card to the player and remove it from the stack.
             self.player_power_cards[player_index][empty_places[0]] = drawn_power_card
+            # For "King Tactics" comment out the following line.
             self.drawable_power_cards = np.concatenate((self.drawable_power_cards[0:power_card_index], self.drawable_power_cards[power_card_index+1:]))
             
             # If no more cards can be drawn, then all played cards can be drawn again.
@@ -227,7 +258,7 @@ class Game():
             return
         
         # Play a direction card.
-        power_card = move[2]
+        power_card = np.array(move[2])
         self.crown_position += power_card
         
         # Add the played power card to the discard pile and remove it from the player.

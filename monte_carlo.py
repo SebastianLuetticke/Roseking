@@ -91,7 +91,7 @@ class MonteCarlo:
                     max_value = child_node.move_num
         
         # Highest winrate (max child)
-        elif policy == "max":
+        elif policy == "max child":
             max_value = -math.inf
             for move in all_moves:
                 child_node = node.child_node(move)

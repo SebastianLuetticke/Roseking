@@ -1,10 +1,16 @@
 from tkinter import *
+from tkinter import simpledialog, messagebox
 from game import Game
 import players
 import numpy as np
 import math
 from monte_carlo import MonteCarlo
 import threading
+import copy
+from scipy import ndimage
+from sb3_contrib.common.wrappers import ActionMasker
+from sb3_contrib.ppo_mask import MaskablePPO
+from game_env import GameEnv
 
 class GUI():
     """Class to visualise the game."""
@@ -39,6 +45,7 @@ class GUI():
     PLAYER_LABEL_HEIGHT = 20
     POWER_CARD_WIDTH = 50
     POWER_CARD_HEIGHT = 100
+    POWER_CARD_INPUT_FIELD_HEIGHT = 30
     HERO_CARD_WIDTH = 100
     HERO_CARD_HEIGHT = 50
     HERO_CARD_CB_WIDTH = 150
@@ -47,7 +54,7 @@ class GUI():
     THINKING_LABEL_HEIGHT = 30
     GAP = 10
     
-    def __init__(self):
+    def __init__(self, with_power_card_input=False):
         """Initialise a new GUI.
         """
         self.window = Tk()
@@ -98,7 +105,7 @@ class GUI():
         self.hero_card_use_cbs = []
         self.does_use_hero_card = []
         for i in range(Game.PLAYER_NUM):
-            # Create labels forthe player information.
+            # Create labels for the player information.
             player_bg_color = self.PLAYER1_COLOR
             if i == 1:
                 player_bg_color = self.PLAYER2_COLOR
@@ -162,6 +169,18 @@ class GUI():
                          y=self.GAP+Game.BOARD_SIZE*self.SQUARE_SIZE-self.POWER_CARD_HEIGHT,
                          width=2*self.POWER_CARD_WIDTH,
                          height=self.POWER_CARD_HEIGHT)
+        # Create an input field to determine the power card to be drawn.
+        self.with_power_card_input = with_power_card_input
+        self.power_card_input = StringVar()
+        self.power_card_input_field = Entry(master=self.window,
+                                      textvariable = self.power_card_input,
+                                      bg=self.POWER_CARD_COLOR,
+                                      font=self.STACK_FONT)
+        if with_power_card_input:
+            self.power_card_input_field.place(x=self.GAP+Game.BOARD_SIZE*self.SQUARE_SIZE+self.GAP,
+                                    y=self.GAP+Game.BOARD_SIZE*self.SQUARE_SIZE-self.POWER_CARD_HEIGHT-self.GAP-self.POWER_CARD_INPUT_FIELD_HEIGHT,
+                                    width=2*self.POWER_CARD_WIDTH,
+                                    height=self.POWER_CARD_INPUT_FIELD_HEIGHT)
         
         # Create labels to show the played power cards.
         self.played_power_cards = []
@@ -172,10 +191,17 @@ class GUI():
             self.played_power_cards.append(played_power_card)
         
         self.game = None
-        self.is_player_computer = None
-        self.mcts = None
-        self.start_new_game(False, False)
+
+        # for rl agent
+        #self.game_env = GameEnv(model=2)
+        #self.game_env = ActionMasker(self.game_env, self.game_env.valid_action_mask)
+        #model_path = "models/trained_models/model2.zip"
+        #self.model = MaskablePPO.load(model_path, env=self.game_env)
         
+        self.is_player_computer = None
+        self.is_game_started = False
+        if not with_power_card_input:
+            self.start_new_game(False, False)
         self.window.mainloop()
     
     def start_new_game(self, is_player1_computer, is_player2_computer):
@@ -185,7 +211,40 @@ class GUI():
         is_player1_computer -- Indicates whether player1 is a computer.
         is_player2_computer -- Indicates whether player2 is a computer.
         """
-        self.game = Game()
+        self.game = Game(with_power_card_input=self.with_power_card_input)
+        # for rl agent
+        #self.game_env.set_game(self.game)
+        
+        self.is_game_started = True
+
+        if self.with_power_card_input:
+            # Display a dialogue window for each card slot of both players so that the user can define the starting power card.
+            position_names = ["first", "second", "third", "forth", "fifth"]
+            power_card_indices = [[], []]
+            for i in range(Game.PLAYER_NUM):
+                for j in range(Game.POWER_CARDS_PLACES_NUM):
+                    power_card_to_draw_index = None
+                    while(True):
+                        power_card_input = simpledialog.askstring("Starting Card Input", f"Enter the {position_names[j]} starting card of player {i+1}.")
+                        try:
+                            power_card_to_draw_index = self.convert_power_card_input_to_index(power_card_input)
+                            # For "King Tactics" comment out the following if-condition and delete the comment marker below it.
+                            if power_card_to_draw_index in power_card_indices[0] or power_card_to_draw_index in power_card_indices[1]:
+                                raise ValueError()
+                            else:
+                                break
+                            # break
+                        except ValueError:
+                            messagebox.showerror(title="Card not available",
+                                                 message="The entered card does not exist or is no longer in the deck.")
+                        except AttributeError:
+                            messagebox.showerror(title="Card Input canceled",
+                                                 message="You canceled the card input. The game has been cancelled.")
+                            self.is_game_started = False
+                            return
+                    power_card_indices[i].append(power_card_to_draw_index)
+            self.game.set_power_cards(power_card_indices)
+        
         self.is_player_computer = [is_player1_computer, is_player2_computer]
         self.sync_game()
         
@@ -294,6 +353,7 @@ class GUI():
             self.stack.config(state=NORMAL)
         # Display the current number of cards in the stack.
         self.stack.config(text=f"Draw Card\n\n{len(self.game.drawable_power_cards)} cards\navailable")
+        self.power_card_input.set("")
         
         # Show all cards in the discard pile.
         for i in range(Game.POWER_CARDS_NUM):
@@ -320,6 +380,30 @@ class GUI():
                                             width=self.PLAYER_LABEL_HEIGHT,
                                             height=self.PLAYER_LABEL_HEIGHT)
     
+    def convert_power_card_input_to_index(self, power_card_input):
+        """Convert a string entered by the user into a power card.
+        If the string does not have the correct format, throw an exception.
+
+        arguments:
+        power_card_input -- A string entered by the user for a power card.
+        """
+        try:
+            values = [int(value) for value in power_card_input.split(',')]
+            if len(values) == 2:
+                power_card_to_draw = (values[1], values[0]) # Swap here to have x as the first coordinate.
+                is_power_card_in_stack = np.all(self.game.drawable_power_cards == power_card_to_draw, axis=1)
+                if not np.any(is_power_card_in_stack):
+                    raise ValueError()
+                else:
+                    power_card_to_draw_index = np.where(is_power_card_in_stack)[0][0]
+                    return power_card_to_draw_index
+            else:
+                raise ValueError()
+        except ValueError:
+            raise ValueError()
+        except AttributeError:
+            raise AttributeError()
+        
     def execute_move(self, power_card_index, is_computermove=False):
         """Executes a move, usually based on the power card that was clicked.
         
@@ -327,14 +411,18 @@ class GUI():
         power_card_index -- Specifies the position of the power card to be played.
         is_computermove -- Specifies whether a computer move is to be executed.
         """
-        # When the game is over, no move can be made.
+        # When the game is not started over, no move can be made.
+        if not self.is_game_started:
+            messagebox.showerror(title="Game not started",
+                                 message="No game has been started yet.\nA new game can be started.")
+            return
         if self.game.is_game_over():
             messagebox.showerror(title="Game Over",
                                  message="The game is already over.\nA new game can be started.")
             return
         
         player_to_move_index = self.game.determine_player_index(self.game.player_to_move)
-        # The user should be informed when a computer move is executed.
+        # The user should be informed via a label when a computer move is calculated.
         # The move is executed in a separate thread so that the gui is not only
         # updated when the computer has moved.
         if is_computermove:
@@ -347,17 +435,26 @@ class GUI():
             computer_thread.start()
             
         else: # A human player makes a move.
+            power_card_to_draw_index = None
             if power_card_index == None: # Draw a direction card.
                 move = (True, False, None)
+                if self.with_power_card_input:
+                    # The power card to be drawn is defined here by the string entered in the input field.
+                    try:
+                        power_card_to_draw_index = self.convert_power_card_input_to_index(self.power_card_input.get())
+                    except ValueError:
+                        messagebox.showerror(title="Move not possible",
+                                         message="The card to be drawn does not exist or is no longer in the deck.")
+                        return
                 
             else: # Play a power card.
-                played_power_card = self.game.player_power_cards[player_to_move_index][power_card_index]
+                played_power_card = list(self.game.player_power_cards[player_to_move_index][power_card_index])
                 move = (False, self.does_use_hero_card[player_to_move_index].get(), played_power_card)
             
             # Check if the move is possible
             legal_moves = self.game.get_legal_moves(self.game.player_to_move)
-            if any(legal_move[0] == move[0] and legal_move[1] == move[1] and np.all(legal_move[2] == move[2]) for legal_move in legal_moves):
-                self.game.execute_move(move, self.game.player_to_move)
+            if move in legal_moves:
+                self.game.execute_move(move, self.game.player_to_move, power_card_to_draw_index)
                 self.sync_game()
             else:
                 messagebox.showerror(title="Move not possible",
@@ -369,8 +466,38 @@ class GUI():
     def execute_computer_move(self):
         """Calculate a move for a computer player.
         """
-        move = players.minimax(self.game, 7, [-math.inf, -math.inf, -math.inf], [math.inf, math.inf, math.inf], self.game.player_to_move, 30)[1]
-        self.game.execute_move(move, self.game.player_to_move)
+        move = players.alphabeta(self.game, 7, -math.inf, math.inf, self.game.player_to_move, 30)[1]
+        # for rl opponent
+        #move = players.rl(self.game, self.game_env, self.model)
+        
+        self.window.after(0, lambda: self.execute_computer_move_in_main_thread(move))
+
+    def execute_computer_move_in_main_thread(self, move):
+        """Auxiliary method for execute_computer_move to display an eventual dialogue window in the main thread.
+
+        arguments:
+        move -- The computer's calculated move.
+        """
+        power_card_to_draw_index = None
+        if move != None:
+            if move[0]: # The computer wants to draw a card.
+                if self.with_power_card_input:
+                    # Display a dialogue window so that the user can define the power card to be drawn.
+                    while(True):
+                        power_card_input = simpledialog.askstring("Card Drawing", "The computer wants to draw a card.\nEnter the card to be drawn.")
+                        try:
+                            power_card_to_draw_index = self.convert_power_card_input_to_index(power_card_input)
+                            break
+                        except ValueError:
+                            messagebox.showerror(title="Move not possible",
+                                                 message="The card to be drawn does not exist or is no longer in the deck.")
+                        except AttributeError:
+                            messagebox.showerror(title="Card Input canceled",
+                                                 message="You canceled the card input. The game has been cancelled.")
+                            self.is_game_started = False
+                            return
+        
+        self.game.execute_move(move, self.game.player_to_move, power_card_to_draw_index)
         self.computer_thinking_label.place_forget()
         self.sync_game()
         self.handle_consequences()
