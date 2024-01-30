@@ -9,7 +9,7 @@ To train and test the developed reinforcement learning agents, make sure that th
 - [game.py](game.py): All rules of the game "Rose King" are implemented here.
 - [gui.py](gui.py): The graphical user interface is implemented here. The default AI opponent is an alpha-beta agent with a search depth of seven through the code.
 - [start_gui.py](start_gui.py): Execute this file to start a new game against another person or an AI via the GUI.
-- [start_gui_with_power_card_input.py](start_gui_with_power_card_input.py): Execute this file to test the preset AI agent via the GUI against an AI from another project. Important: If the AI from the "King Tactics" application is to be tested, the lines specified in the gui.py file must be commented out or uncommented.
+- [start_gui_with_power_card_input.py](start_gui_with_power_card_input.py): Execute this file to test the preset AI agent via the GUI against an AI from another project. The first game must be started via the GUI menu. Important: If the AI from the "King Tactics" application is to be tested, the lines specified in the gui.py file must be commented out or uncommented.
 - [compare.py](compare.py): Contains a method to compare all values of both players, which are necessary to determine the winner of "Rose King".
 - [monte_carlo.py](monte_carlo.py): The functions of the MCTS are implemented here.
 - [monte_carlo_node,py](monte_carlo_node.py): Here the class for a node in a Monte Carlo tree is implemented.
