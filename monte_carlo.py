@@ -31,7 +31,7 @@ class MonteCarlo:
             node = MonteCarloNode(None, None, state, unexpanded_moves)
             self.nodes[state.hash_value] = node
     
-    def run_search(self, state, timeout=3):
+    def run_search(self, state, timeout=1):
         """From given state, run as many simulations as possible until the time limit, building statistics.
         
         arguments:
@@ -61,7 +61,7 @@ class MonteCarlo:
         
         return {"runtime": timeout, "simulation": total_sims, "draws": draws}
     
-    def best_move(self, state, policy="robust"):
+    def best_move(self, state, policy="robust child"):
         """From the available statistics, calculate the best move from the given state.
         
         arguments:
@@ -82,7 +82,7 @@ class MonteCarlo:
         best_move = None
         
         # Most visits (robust child)
-        if policy == "robust":
+        if policy == "robust child":
             max_value = -math.inf
             for move in all_moves:
                 child_node = node.child_node(move)
